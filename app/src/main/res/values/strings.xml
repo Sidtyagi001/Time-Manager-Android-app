@@ -1,0 +1,12 @@
+<resources>
+    <string name="app_name">Time Manager</string>
+    <string name="nav_home">Home</string>
+    <string name="nav_activities">Activities</string>
+    <string name="nav_timetable">Timetable</string>
+    <string name="nav_focus">Focus</string>
+    <string name="nav_reports">Reports</string>
+    <string name="channel_reminders_name">Reminders and Alarms</string>
+    <string name="channel_reminders_desc">Notifications for scheduled tasks, alarms, and productivity reminders</string>
+    <string name="channel_focus_name">Focus Mode</string>
+    <string name="channel_focus_desc">Alerts for Pomodoro focus and rest interval transitions</string>
+</resources>

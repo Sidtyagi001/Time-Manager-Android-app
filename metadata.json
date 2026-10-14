@@ -1,0 +1,6 @@
+{
+  "name": "Time Manager",
+  "description": "Offline personal time management and productivity app with activity tracking, 24h timetable, alarms, 25/5 Pomodoro focus mode, analytics, and Excel export.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
