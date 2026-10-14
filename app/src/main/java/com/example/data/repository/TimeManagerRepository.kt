@@ -139,23 +139,27 @@ class TimeManagerRepository(
     suspend fun getDayReport(dateStr: String, now: Long = System.currentTimeMillis()): DayTimeReport {
         val allSessions = sessionDao.getAllSessionsList()
         val tasks = timetableDao.getTasksForDateSync(dateStr)
+        val settings = getUserSettings()
         return TimeAccountingEngine.calculateDayReport(
             dateStr = dateStr,
             allSessions = allSessions,
             timetableTasks = tasks,
-            now = now
+            now = now,
+            trackingStartTimestamp = settings.trackingStartTimestamp
         )
     }
 
     suspend fun getMultiDayReports(startDate: LocalDate, endDate: LocalDate, now: Long = System.currentTimeMillis()): List<DayTimeReport> {
         val allSessions = sessionDao.getAllSessionsList()
         val tasks = timetableDao.getAllTasks()
+        val settings = getUserSettings()
         return TimeAccountingEngine.calculateMultiDayReports(
             startDate = startDate,
             endDate = endDate,
             allSessions = allSessions,
             timetableTasks = tasks,
-            now = now
+            now = now,
+            trackingStartTimestamp = settings.trackingStartTimestamp
         )
     }
 
@@ -353,6 +357,26 @@ class TimeManagerRepository(
 
     // Settings
     fun getUserSettingsFlow(): Flow<UserSettingsEntity?> = settingsDao.getSettingsFlow()
-    suspend fun getUserSettings(): UserSettingsEntity = settingsDao.getSettings() ?: UserSettingsEntity()
+
+    suspend fun getUserSettings(): UserSettingsEntity {
+        val existing = settingsDao.getSettings()
+        return if (existing != null) {
+            if (existing.trackingStartTimestamp <= 0L) {
+                val earliest = sessionDao.getAllSessionsList().minOfOrNull { it.startTime }
+                val startTs = earliest ?: System.currentTimeMillis()
+                val updated = existing.copy(trackingStartTimestamp = startTs)
+                settingsDao.insertOrUpdate(updated)
+                updated
+            } else {
+                existing
+            }
+        } else {
+            val now = System.currentTimeMillis()
+            val defaultSettings = UserSettingsEntity(trackingStartTimestamp = now)
+            settingsDao.insertOrUpdate(defaultSettings)
+            defaultSettings
+        }
+    }
+
     suspend fun saveUserSettings(settings: UserSettingsEntity) = settingsDao.insertOrUpdate(settings)
 }

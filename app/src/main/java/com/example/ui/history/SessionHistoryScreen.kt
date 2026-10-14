@@ -56,6 +56,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.data.local.entity.ActivitySessionEntity
+import com.example.domain.time.TimeFormatUtils
 import com.example.ui.MainViewModel
 import java.time.Instant
 import java.time.ZoneId
@@ -70,6 +71,8 @@ fun SessionHistoryScreen(
 ) {
     val allSessions by viewModel.allSessions.collectAsState()
     val activities by viewModel.activeActivities.collectAsState()
+    val userSettings by viewModel.userSettings.collectAsState()
+    val is24Hour = userSettings?.is24HourFormat ?: true
 
     var searchQuery by remember { mutableStateOf("") }
     var showManualDialog by remember { mutableStateOf(false) }
@@ -134,6 +137,7 @@ fun SessionHistoryScreen(
                     items(filteredSessions, key = { it.id }) { session ->
                         SessionItemCard(
                             session = session,
+                            is24Hour = is24Hour,
                             onEdit = { sessionToEdit = session },
                             onDelete = { sessionToDelete = session }
                         )
@@ -198,12 +202,12 @@ fun SessionHistoryScreen(
 @Composable
 fun SessionItemCard(
     session: ActivitySessionEntity,
+    is24Hour: Boolean,
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
-    val timeFmt = DateTimeFormatter.ofPattern("MMM d, yyyy • HH:mm").withZone(ZoneId.systemDefault())
-    val startStr = timeFmt.format(Instant.ofEpochMilli(session.startTime))
-    val endStr = if (session.endTime > 0) timeFmt.format(Instant.ofEpochMilli(session.endTime)) else "In Progress"
+    val startStr = TimeFormatUtils.formatDateTime(session.startTime, is24Hour)
+    val endStr = if (session.endTime > 0) TimeFormatUtils.formatDateTime(session.endTime, is24Hour) else "In Progress"
     val durationMillis = if (session.endTime > 0) max(0L, session.endTime - session.startTime) else (System.currentTimeMillis() - session.startTime)
     val mins = durationMillis / 60000
 

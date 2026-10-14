@@ -53,6 +53,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.data.local.entity.ActivityEntity
 import com.example.domain.focus.FocusPhaseType
+import com.example.domain.time.TimeFormatUtils
 import com.example.ui.MainViewModel
 import java.time.Instant
 import java.time.LocalDate
@@ -78,13 +79,14 @@ fun HomeScreen(
     val focusState by viewModel.focusState.collectAsState()
     val activeFocusRun by viewModel.activeFocusRun.collectAsState()
     val todayTasks by viewModel.selectedDateTasks.collectAsState()
+    val userSettings by viewModel.userSettings.collectAsState()
+    val is24Hour = userSettings?.is24HourFormat ?: true
 
     val nextReminder = reminders
         .filter { it.triggerTime > currentTime && !it.isCompleted && !it.isCancelled }
         .minByOrNull { it.triggerTime }
 
     val dateFormatter = DateTimeFormatter.ofPattern("EEEE, MMMM d")
-    val timeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss").withZone(ZoneId.systemDefault())
 
     LazyColumn(
         modifier = modifier
@@ -102,10 +104,11 @@ fun HomeScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = timeFormatter.format(Instant.ofEpochMilli(currentTime)),
+                    text = TimeFormatUtils.formatTimeWithSeconds(currentTime, is24Hour),
                     style = MaterialTheme.typography.headlineLarge,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.testTag("home_live_clock")
                 )
             }
         }
@@ -468,9 +471,7 @@ fun HomeScreen(
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold
                             )
-                            val schedTime = DateTimeFormatter.ofPattern("HH:mm")
-                                .withZone(ZoneId.systemDefault())
-                                .format(Instant.ofEpochMilli(nextReminder.triggerTime))
+                            val schedTime = TimeFormatUtils.formatTime(nextReminder.triggerTime, is24Hour)
                             Text(
                                 text = "Scheduled for $schedTime",
                                 style = MaterialTheme.typography.bodySmall,
@@ -526,7 +527,7 @@ fun HomeScreen(
                             todayTasks.take(3).forEach { task ->
                                 val hour = task.slotIndex / 2
                                 val min = (task.slotIndex % 2) * 30
-                                val timeStr = String.format("%02d:%02d", hour, min)
+                                val timeStr = TimeFormatUtils.formatTime(hour, min, is24Hour)
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween

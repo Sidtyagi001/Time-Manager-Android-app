@@ -61,6 +61,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.data.local.entity.TimetableTaskEntity
 import com.example.domain.time.TimeAccountingEngine
+import com.example.domain.time.TimeFormatUtils
 import com.example.ui.MainViewModel
 import java.time.LocalDate
 import java.time.LocalTime
@@ -77,6 +78,8 @@ fun TimetableScreen(
     val activeActivities by viewModel.activeActivities.collectAsState()
     val dayReport by viewModel.selectedDateReport.collectAsState()
     val currentTime by viewModel.currentTimeMillis.collectAsState()
+    val userSettings by viewModel.userSettings.collectAsState()
+    val is24Hour = userSettings?.is24HourFormat ?: true
 
     var showTaskDialog by remember { mutableStateOf(false) }
     var taskToEdit by remember { mutableStateOf<TimetableTaskEntity?>(null) }
@@ -204,7 +207,7 @@ fun TimetableScreen(
                     // Current Time Indicator
                     if (isToday && currentLocalTime.hour == hour) {
                         item {
-                            CurrentTimeIndicator(currentLocalTime = currentLocalTime)
+                            CurrentTimeIndicator(currentLocalTime = currentLocalTime, is24Hour = is24Hour)
                         }
                     }
 
@@ -212,6 +215,7 @@ fun TimetableScreen(
                         HourBlockView(
                             hour = hour,
                             tasksInHour = tasksInHour,
+                            is24Hour = is24Hour,
                             onAddTask = { slot ->
                                 defaultSlotForNewTask = slot
                                 taskToEdit = null
@@ -241,6 +245,7 @@ fun TimetableScreen(
             defaultSlot = defaultSlotForNewTask,
             dateStr = TimeAccountingEngine.formatDate(selectedDate),
             activities = activeActivities,
+            is24Hour = is24Hour,
             onDismiss = { showTaskDialog = false; taskToEdit = null },
             onSave = { task ->
                 viewModel.saveTimetableTask(task)
@@ -252,7 +257,7 @@ fun TimetableScreen(
 }
 
 @Composable
-fun CurrentTimeIndicator(currentLocalTime: LocalTime) {
+fun CurrentTimeIndicator(currentLocalTime: LocalTime, is24Hour: Boolean) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -264,7 +269,7 @@ fun CurrentTimeIndicator(currentLocalTime: LocalTime) {
             color = MaterialTheme.colorScheme.error
         ) {
             Text(
-                text = String.format("%02d:%02d NOW", currentLocalTime.hour, currentLocalTime.minute),
+                text = "${TimeFormatUtils.formatTime(currentLocalTime.hour, currentLocalTime.minute, is24Hour)} NOW",
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onError,
@@ -284,13 +289,14 @@ fun CurrentTimeIndicator(currentLocalTime: LocalTime) {
 fun HourBlockView(
     hour: Int,
     tasksInHour: List<TimetableTaskEntity>,
+    is24Hour: Boolean,
     onAddTask: (slot: Int) -> Unit,
     onEditTask: (TimetableTaskEntity) -> Unit,
     onDeleteTask: (TimetableTaskEntity) -> Unit,
     onSplitTask: (TimetableTaskEntity) -> Unit,
     onToggleComplete: (TimetableTaskEntity) -> Unit
 ) {
-    val timeLabel = String.format("%02d:00", hour)
+    val timeLabel = TimeFormatUtils.formatTime(hour, 0, is24Hour)
 
     Row(
         modifier = Modifier
@@ -304,7 +310,7 @@ fun HourBlockView(
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.width(52.dp)
+            modifier = Modifier.width(68.dp)
         )
 
         // Right Content
@@ -344,6 +350,7 @@ fun HourBlockView(
                 tasksInHour.forEach { task ->
                     TaskCard(
                         task = task,
+                        is24Hour = is24Hour,
                         onEdit = { onEditTask(task) },
                         onDelete = { onDeleteTask(task) },
                         onSplit = { onSplitTask(task) },
@@ -355,7 +362,8 @@ fun HourBlockView(
                 if (tasksInHour.size == 1 && tasksInHour[0].durationMinutes == 30) {
                     val occupiedSlot = tasksInHour[0].slotIndex
                     val emptySlot = if (occupiedSlot % 2 == 0) occupiedSlot + 1 else occupiedSlot - 1
-                    val emptySlotMin = if (emptySlot % 2 == 0) "00" else "30"
+                    val emptySlotMinute = if (emptySlot % 2 == 0) 0 else 30
+                    val emptyTimeStr = TimeFormatUtils.formatTime(hour, emptySlotMinute, is24Hour)
                     Surface(
                         shape = RoundedCornerShape(8.dp),
                         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
@@ -369,7 +377,7 @@ fun HourBlockView(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = String.format("%02d:%s Empty (30m)", hour, emptySlotMin),
+                                text = "$emptyTimeStr Empty (30m)",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                             )
@@ -387,11 +395,19 @@ fun HourBlockView(
 @Composable
 fun TaskCard(
     task: TimetableTaskEntity,
+    is24Hour: Boolean,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onSplit: () -> Unit,
     onToggleComplete: () -> Unit
 ) {
+    val startHour = task.slotIndex / 2
+    val startMin = (task.slotIndex % 2) * 30
+    val endMinutesTotal = (task.slotIndex * 30) + task.durationMinutes
+    val endHour = (endMinutesTotal / 60) % 24
+    val endMin = endMinutesTotal % 60
+    val timeRangeStr = "${TimeFormatUtils.formatTime(startHour, startMin, is24Hour)} - ${TimeFormatUtils.formatTime(endHour, endMin, is24Hour)}"
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -437,14 +453,12 @@ fun TaskCard(
                         )
                     }
                 }
-                if (task.category.isNotBlank() || task.description.isNotBlank()) {
-                    Text(
-                        text = listOf(task.category, task.description).filter { it.isNotBlank() }.joinToString(" • "),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1
-                    )
-                }
+                Text(
+                    text = listOf(timeRangeStr, task.category, task.description).filter { it.isNotBlank() }.joinToString(" • "),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1
+                )
             }
 
             // Split 60m into two 30m blocks
@@ -476,6 +490,7 @@ fun TimetableTaskDialog(
     defaultSlot: Int,
     dateStr: String,
     activities: List<com.example.data.local.entity.ActivityEntity>,
+    is24Hour: Boolean,
     onDismiss: () -> Unit,
     onSave: (TimetableTaskEntity) -> Unit
 ) {
@@ -517,7 +532,7 @@ fun TimetableTaskDialog(
                 // Start time slot picker
                 val hour = slotIndex / 2
                 val min = (slotIndex % 2) * 30
-                Text("Start Time: ${String.format("%02d:%02d", hour, min)}", style = MaterialTheme.typography.labelMedium)
+                Text("Start Time: ${TimeFormatUtils.formatTime(hour, min, is24Hour)}", style = MaterialTheme.typography.labelMedium)
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     items(24) { h ->
                         val slot = h * 2
@@ -525,7 +540,7 @@ fun TimetableTaskDialog(
                             onClick = { slotIndex = slot },
                             modifier = Modifier.padding(2.dp)
                         ) {
-                            Text(String.format("%02d:00", h))
+                            Text(TimeFormatUtils.formatTime(h, 0, is24Hour))
                         }
                     }
                 }

@@ -53,7 +53,9 @@ data class DayTimeReport(
     val unfulfilledPlannedMillis: Long,
     val trackingCompletenessPercent: Float,
     val activityBreakdowns: List<ActivityBreakdown>,
-    val segments: List<DaySessionSegment>
+    val segments: List<DaySessionSegment>,
+    val isPreTracking: Boolean = false,
+    val isPartialFirstDay: Boolean = false
 )
 
 object TimeAccountingEngine {
@@ -120,23 +122,36 @@ object TimeAccountingEngine {
         allSessions: List<ActivitySessionEntity>,
         timetableTasks: List<TimetableTaskEntity>,
         now: Long = System.currentTimeMillis(),
-        zoneId: ZoneId = ZoneId.systemDefault()
+        zoneId: ZoneId = ZoneId.systemDefault(),
+        trackingStartTimestamp: Long = 0L
     ): DayTimeReport {
         val targetDate = parseDate(dateStr)
         val dayStart = getStartOfDayMillis(targetDate, zoneId)
         val dayEnd = getEndOfDayMillis(targetDate, zoneId) + 1 // start of next day for exact boundary
+
+        // Check if the entire day is before tracking started
+        val isPreTracking = trackingStartTimestamp > 0L && dayEnd <= trackingStartTimestamp
+        val isPartialFirstDay = trackingStartTimestamp > 0L && trackingStartTimestamp > dayStart && trackingStartTimestamp < dayEnd
 
         val todayDate = Instant.ofEpochMilli(now).atZone(zoneId).toLocalDate()
         val isToday = targetDate == todayDate
         val isFuture = targetDate.isAfter(todayDate)
 
         val effectiveDayEnd = when {
+            isPreTracking -> dayStart
             isFuture -> dayStart
             isToday -> min(dayEnd, now)
             else -> dayEnd
         }
 
-        val effectiveWindowMillis = max(0L, effectiveDayEnd - dayStart)
+        // For the first tracking day, calculate from the saved tracking start timestamp rather than midnight!
+        val effectiveDayStart = when {
+            isPreTracking -> dayStart
+            isPartialFirstDay -> trackingStartTimestamp
+            else -> dayStart
+        }
+
+        val effectiveWindowMillis = if (isPreTracking) 0L else max(0L, effectiveDayEnd - effectiveDayStart)
 
         // Find and clip sessions that overlap with this calendar day
         val daySegments = mutableListOf<DaySessionSegment>()
@@ -183,7 +198,7 @@ object TimeAccountingEngine {
         val uniqueBreakDuration = computeUniqueCoveredDuration(breakIntervals)
         val uniqueTotalCovered = computeUniqueCoveredDuration(allRecordedIntervals)
 
-        val untrackedMillis = max(0L, effectiveWindowMillis - uniqueTotalCovered)
+        val untrackedMillis = if (isPreTracking) 0L else max(0L, effectiveWindowMillis - uniqueTotalCovered)
 
         val trackingCompletenessPercent = if (effectiveWindowMillis > 0) {
             (uniqueTotalCovered.toFloat() / effectiveWindowMillis.toFloat()).coerceIn(0f, 1f) * 100f
@@ -254,7 +269,9 @@ object TimeAccountingEngine {
             unfulfilledPlannedMillis = unfulfilledPlannedMillis,
             trackingCompletenessPercent = trackingCompletenessPercent,
             activityBreakdowns = breakdowns,
-            segments = daySegments.sortedBy { it.segmentStart }
+            segments = daySegments.sortedBy { it.segmentStart },
+            isPreTracking = isPreTracking,
+            isPartialFirstDay = isPartialFirstDay
         )
     }
 
@@ -267,13 +284,14 @@ object TimeAccountingEngine {
         allSessions: List<ActivitySessionEntity>,
         timetableTasks: List<TimetableTaskEntity>,
         now: Long = System.currentTimeMillis(),
-        zoneId: ZoneId = ZoneId.systemDefault()
+        zoneId: ZoneId = ZoneId.systemDefault(),
+        trackingStartTimestamp: Long = 0L
     ): List<DayTimeReport> {
         val reports = mutableListOf<DayTimeReport>()
         var cur = startDate
         while (!cur.isAfter(endDate)) {
             val dateStr = formatDate(cur)
-            reports.add(calculateDayReport(dateStr, allSessions, timetableTasks, now, zoneId))
+            reports.add(calculateDayReport(dateStr, allSessions, timetableTasks, now, zoneId, trackingStartTimestamp))
             cur = cur.plusDays(1)
         }
         return reports

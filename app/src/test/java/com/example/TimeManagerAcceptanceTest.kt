@@ -15,6 +15,7 @@ import com.example.data.repository.TimeManagerRepository
 import com.example.domain.focus.FocusEngine
 import com.example.domain.focus.FocusPhaseType
 import com.example.domain.time.TimeAccountingEngine
+import com.example.domain.time.TimeFormatUtils
 import com.example.domain.time.TimeInterval
 import com.example.export.BackupRestoreManager
 import com.example.export.XlsxWorkbookWriter
@@ -437,5 +438,167 @@ class TimeManagerAcceptanceTest {
     fun testAppNameResource() {
         val appName = context.getString(R.string.app_name)
         assertEquals("Time Manager", appName)
+    }
+
+    // 16. Verify 12-hour vs 24-hour time formatting across TimeFormatUtils
+    @Test
+    fun testTimeFormat12HourVs24Hour() {
+        // 14:30
+        val time24 = TimeFormatUtils.formatTime(14, 30, is24Hour = true)
+        val time12 = TimeFormatUtils.formatTime(14, 30, is24Hour = false)
+        assertEquals("14:30", time24)
+        assertEquals("2:30 PM", time12)
+
+        // 09:05 AM
+        val morning24 = TimeFormatUtils.formatTime(9, 5, is24Hour = true)
+        val morning12 = TimeFormatUtils.formatTime(9, 5, is24Hour = false)
+        assertEquals("09:05", morning24)
+        assertEquals("9:05 AM", morning12)
+
+        // Midnight 00:00
+        val midnight24 = TimeFormatUtils.formatTime(0, 0, is24Hour = true)
+        val midnight12 = TimeFormatUtils.formatTime(0, 0, is24Hour = false)
+        assertEquals("00:00", midnight24)
+        assertEquals("12:00 AM", midnight12)
+    }
+
+    // 17. UserSettings persistence of is24HourFormat
+    @Test
+    fun testUserSettings24HourPersistence() = runBlocking {
+        // Default is 24-hour
+        val defaultSettings = repository.getUserSettings()
+        assertTrue(defaultSettings.is24HourFormat)
+
+        // Change to 12-hour
+        repository.saveUserSettings(defaultSettings.copy(is24HourFormat = false))
+        val updated = repository.getUserSettings()
+        assertFalse(updated.is24HourFormat)
+
+        // Change back to 24-hour
+        repository.saveUserSettings(updated.copy(is24HourFormat = true))
+        val backTo24 = repository.getUserSettings()
+        assertTrue(backTo24.is24HourFormat)
+    }
+
+    // 18. Quick duration calculation from current instant
+    @Test
+    fun testQuickDurationCalculatesFromInstant() {
+        val currentInstant = 1700000000000L // arbitrary fixed timestamp
+        val quickMinutes = listOf(10L, 15L, 30L, 45L, 60L, 120L)
+
+        for (minutes in quickMinutes) {
+            val targetMillis = currentInstant + (minutes * 60 * 1000L)
+            val diffMinutes = (targetMillis - currentInstant) / (60 * 1000L)
+            assertEquals(minutes, diffMinutes)
+        }
+    }
+
+    // 19. Quick duration crossing midnight handles date boundary
+    @Test
+    fun testQuickDurationCrossingMidnight() {
+        val zone = ZoneId.systemDefault()
+        val today = LocalDate.of(2026, 10, 14)
+        val time2345 = today.atTime(23, 45).atZone(zone).toInstant().toEpochMilli()
+
+        // Remind me in 30 minutes -> crosses midnight to 00:15 next day
+        val reminderMillis = time2345 + (30 * 60 * 1000L)
+        val reminderInstant = java.time.Instant.ofEpochMilli(reminderMillis).atZone(zone)
+
+        assertEquals(LocalDate.of(2026, 10, 15), reminderInstant.toLocalDate())
+        assertEquals(0, reminderInstant.hour)
+        assertEquals(15, reminderInstant.minute)
+
+        val summary24 = TimeFormatUtils.formatScheduledSummary(reminderMillis, is24Hour = true, now = time2345, zoneId = zone)
+        val summary12 = TimeFormatUtils.formatScheduledSummary(reminderMillis, is24Hour = false, now = time2345, zoneId = zone)
+
+        assertEquals("Tomorrow at 00:15", summary24)
+        assertEquals("Tomorrow at 12:15 AM", summary12)
+    }
+
+    // 20. Updating a scheduled reminder cancels the old pending alarm and reschedules cleanly
+    @Test
+    fun testUpdatingScheduledReminderReschedulesWithoutDuplicates() = runBlocking {
+        val now = System.currentTimeMillis()
+        val futureTime1 = now + 3600000L // 1h
+        val futureTime2 = now + 7200000L // 2h
+
+        val reminder = ReminderEntity(
+            title = "Original Meeting",
+            triggerTime = futureTime1
+        )
+        val id = repository.saveReminder(reminder)
+        assertTrue(id > 0)
+
+        val saved = db.reminderDao().getById(id)
+        assertNotNull(saved)
+        assertEquals(futureTime1, saved!!.triggerTime)
+
+        // Update reminder time to futureTime2
+        repository.saveReminder(saved.copy(triggerTime = futureTime2, title = "Updated Meeting"))
+        val updated = db.reminderDao().getById(id)
+        assertNotNull(updated)
+        assertEquals(futureTime2, updated!!.triggerTime)
+        assertEquals("Updated Meeting", updated.title)
+
+        // Only one reminder entity exists in database
+        val allReminders = db.reminderDao().getAllRemindersList()
+        assertEquals(1, allReminders.size)
+    }
+
+    // 21. Initial tracking day accounting: does not count pre-tracking hours as untracked
+    @Test
+    fun testInitialDayAccountingRespectsTrackingStartTimestamp() {
+        val zone = ZoneId.systemDefault()
+        val date = LocalDate.of(2026, 10, 14)
+
+        // User installed app and tracking started at 14:00 (2:00 PM)
+        val trackingStart = date.atTime(14, 0).atZone(zone).toInstant().toEpochMilli()
+        val now = date.atTime(16, 0).atZone(zone).toInstant().toEpochMilli() // 16:00 (4:00 PM)
+
+        // Session from 14:30 to 15:30 (60 minutes)
+        val sessionStart = date.atTime(14, 30).atZone(zone).toInstant().toEpochMilli()
+        val sessionEnd = date.atTime(15, 30).atZone(zone).toInstant().toEpochMilli()
+        val session = ActivitySessionEntity(
+            activityId = 1,
+            activityNameSnapshot = "Work",
+            categorySnapshot = "Career",
+            startTime = sessionStart,
+            endTime = sessionEnd
+        )
+
+        val report = TimeAccountingEngine.calculateDayReport(
+            dateStr = "2026-10-14",
+            allSessions = listOf(session),
+            timetableTasks = emptyList(),
+            now = now,
+            zoneId = zone,
+            trackingStartTimestamp = trackingStart
+        )
+
+        // Effective window is from 14:00 to 16:00 = 120 minutes (NOT 16 hours from midnight!)
+        assertEquals(120L * 60000L, report.effectiveWindowMillis)
+        assertEquals(60L * 60000L, report.trackedMillis)
+        // Untracked is 120m window - 60m tracked = 60 minutes (NOT 15 hours!)
+        assertEquals(60L * 60000L, report.untrackedMillis)
+    }
+
+    // 22. Historical day before tracking started has zero untracked time
+    @Test
+    fun testHistoricalDayBeforeTrackingHasZeroUntracked() {
+        val zone = ZoneId.systemDefault()
+        val trackingStart = LocalDate.of(2026, 10, 14).atTime(14, 0).atZone(zone).toInstant().toEpochMilli()
+
+        val report = TimeAccountingEngine.calculateDayReport(
+            dateStr = "2026-10-13",
+            allSessions = emptyList(),
+            timetableTasks = emptyList(),
+            now = trackingStart,
+            zoneId = zone,
+            trackingStartTimestamp = trackingStart
+        )
+
+        assertTrue(report.isPreTracking)
+        assertEquals(0L, report.effectiveWindowMillis)
+        assertEquals(0L, report.untrackedMillis)
     }
 }

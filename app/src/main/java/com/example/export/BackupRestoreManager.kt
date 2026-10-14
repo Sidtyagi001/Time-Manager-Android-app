@@ -207,6 +207,7 @@ class BackupRestoreManager(
 
         // 9. User Settings
         val settings = db.userSettingsDao().getSettings() ?: UserSettingsEntity()
+        root.put("trackingStartTimestamp", settings.trackingStartTimestamp)
         val settingsObj = JSONObject()
         if (settings.isDarkMode != null) settingsObj.put("isDarkMode", settings.isDarkMode)
         settingsObj.put("focusDurationMinutes", settings.focusDurationMinutes)
@@ -216,6 +217,7 @@ class BackupRestoreManager(
         settingsObj.put("vibrationEnabled", settings.vibrationEnabled)
         settingsObj.put("weekStartDay", settings.weekStartDay)
         settingsObj.put("is24HourFormat", settings.is24HourFormat)
+        settingsObj.put("trackingStartTimestamp", settings.trackingStartTimestamp)
         root.put("settings", settingsObj)
 
         return root.toString(2)
@@ -436,19 +438,28 @@ class BackupRestoreManager(
         }
 
         val settingsObj = root.optJSONObject("settings")
-        val restoredSettings = if (settingsObj != null) {
-            UserSettingsEntity(
-                id = 1,
-                isDarkMode = if (settingsObj.has("isDarkMode")) settingsObj.getBoolean("isDarkMode") else null,
-                focusDurationMinutes = settingsObj.optInt("focusDurationMinutes", 25),
-                breakDurationMinutes = settingsObj.optInt("breakDurationMinutes", 5),
-                warningDurationSeconds = settingsObj.optInt("warningDurationSeconds", 30),
-                soundEnabled = settingsObj.optBoolean("soundEnabled", true),
-                vibrationEnabled = settingsObj.optBoolean("vibrationEnabled", true),
-                weekStartDay = settingsObj.optInt("weekStartDay", 1),
-                is24HourFormat = settingsObj.optBoolean("is24HourFormat", true)
-            )
-        } else null
+        val trackingStart = if (settingsObj != null && settingsObj.has("trackingStartTimestamp")) {
+            settingsObj.getLong("trackingStartTimestamp")
+        } else if (root.has("trackingStartTimestamp")) {
+            root.getLong("trackingStartTimestamp")
+        } else if (sessList.isNotEmpty()) {
+            sessList.minOf { it.startTime }
+        } else {
+            root.optLong("backupTimestamp", System.currentTimeMillis())
+        }
+
+        val restoredSettings = UserSettingsEntity(
+            id = 1,
+            isDarkMode = if (settingsObj?.has("isDarkMode") == true) settingsObj.getBoolean("isDarkMode") else null,
+            focusDurationMinutes = settingsObj?.optInt("focusDurationMinutes", 25) ?: 25,
+            breakDurationMinutes = settingsObj?.optInt("breakDurationMinutes", 5) ?: 5,
+            warningDurationSeconds = settingsObj?.optInt("warningDurationSeconds", 30) ?: 30,
+            soundEnabled = settingsObj?.optBoolean("soundEnabled", true) ?: true,
+            vibrationEnabled = settingsObj?.optBoolean("vibrationEnabled", true) ?: true,
+            weekStartDay = settingsObj?.optInt("weekStartDay", 1) ?: 1,
+            is24HourFormat = settingsObj?.optBoolean("is24HourFormat", true) ?: true,
+            trackingStartTimestamp = trackingStart
+        )
 
         // Execute transactional restore
         return try {

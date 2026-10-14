@@ -54,6 +54,7 @@ import androidx.compose.ui.unit.dp
 import com.example.domain.time.DayTimeReport
 import com.example.domain.time.TimeAccountingEngine
 import com.example.ui.MainViewModel
+import com.example.domain.time.TimeFormatUtils
 import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
@@ -76,6 +77,8 @@ fun ReportsScreen(
 
     val allSessions by viewModel.allSessions.collectAsState()
     val allTasks by viewModel.selectedDateTasks.collectAsState()
+    val userSettings by viewModel.userSettings.collectAsState()
+    val is24Hour = userSettings?.is24HourFormat ?: true
 
     // Refresh report on date or tab change
     LaunchedEffect(selectedTab, currentDate, allSessions) {
@@ -312,12 +315,10 @@ fun ReportsScreen(
                             fontWeight = FontWeight.Bold
                         )
                         Spacer(modifier = Modifier.height(12.dp))
-                        val timeFmt = DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.systemDefault())
-
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             dailyReport!!.segments.forEach { seg ->
-                                val startStr = timeFmt.format(Instant.ofEpochMilli(seg.segmentStart))
-                                val endStr = timeFmt.format(Instant.ofEpochMilli(seg.segmentEnd))
+                                val startStr = TimeFormatUtils.formatTime(seg.segmentStart, is24Hour)
+                                val endStr = TimeFormatUtils.formatTime(seg.segmentEnd, is24Hour)
                                 val mins = seg.durationMillis / 60000
 
                                 Row(

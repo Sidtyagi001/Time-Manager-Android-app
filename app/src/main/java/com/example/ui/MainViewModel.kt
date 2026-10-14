@@ -84,7 +84,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     // Settings
     val userSettings: StateFlow<UserSettingsEntity?> = repository.getUserSettingsFlow()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     // Day reports for selected date
     private val _selectedDateReport = MutableStateFlow<DayTimeReport?>(null)
@@ -102,6 +102,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val selectedDateReview: StateFlow<DailyReviewEntity?> = _selectedDateReview.asStateFlow()
 
     init {
+        // Guarantee settings entity exists in database
+        viewModelScope.launch {
+            repository.getUserSettings()
+        }
+
         // Periodic ticker for elapsed time calculation & focus countdown
         viewModelScope.launch {
             while (true) {
@@ -369,7 +374,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     // Settings
     fun saveUserSettings(settings: UserSettingsEntity) {
         viewModelScope.launch {
-            repository.saveUserSettings(settings)
+            repository.saveUserSettings(settings.copy(id = 1))
+            refreshReports()
         }
     }
 

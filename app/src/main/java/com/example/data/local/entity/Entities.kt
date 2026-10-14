@@ -161,5 +161,6 @@ data class UserSettingsEntity(
     val soundEnabled: Boolean = true,
     val vibrationEnabled: Boolean = true,
     val weekStartDay: Int = 1, // 1 = Monday, 7 = Sunday (java.time.DayOfWeek)
-    val is24HourFormat: Boolean = true
+    val is24HourFormat: Boolean = true,
+    val trackingStartTimestamp: Long = 0L
 )

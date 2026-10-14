@@ -124,13 +124,15 @@ fun SettingsScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column {
+                        Column(modifier = Modifier.weight(1f)) {
                             Text("24-Hour Time Format", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                            Text("Display 00:00 - 23:59 instead of AM/PM", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            val previewTime = com.example.domain.time.TimeFormatUtils.formatTime(14, 30, settings.is24HourFormat)
+                            Text("Example: $previewTime (Display ${if (settings.is24HourFormat) "00:00 - 23:59" else "12-hour AM/PM"})", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         Switch(
                             checked = settings.is24HourFormat,
-                            onCheckedChange = { viewModel.saveUserSettings(settings.copy(is24HourFormat = it)) }
+                            onCheckedChange = { viewModel.saveUserSettings(settings.copy(is24HourFormat = it)) },
+                            modifier = Modifier.testTag("switch_24_hour_format")
                         )
                     }
                 }
