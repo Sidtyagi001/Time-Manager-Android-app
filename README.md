@@ -6,6 +6,8 @@ The application requires **zero accounts, zero cloud servers, zero analytics, ze
 
 ---
 
+Apk:- https://github.com/Sidtyagi001/Time-Manager-Android-app/blob/9e260fccbc16096ca4ce0751ff1a114ccbdc1455/Time%20Manager%201.0_1.apk
+
 ## Architecture and Core Modules
 
 ```
