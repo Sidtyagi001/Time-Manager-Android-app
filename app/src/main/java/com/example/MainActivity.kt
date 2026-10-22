@@ -28,14 +28,17 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        handleAlarmAudioIntent(intent)
         enableEdgeToEdge()
 
         setContent {
             val settings by viewModel.userSettings.collectAsState()
-            val isDarkTheme = when (settings?.isDarkMode) {
-                true -> true
-                false -> false
-                null -> isSystemInDarkTheme()
+            val appTheme = com.example.ui.theme.AppTheme.fromId(settings?.themeId)
+            val isDarkTheme = when {
+                appTheme.isDarkOnly -> true
+                appTheme.isLightOnly -> false
+                settings?.isDarkMode != null -> settings?.isDarkMode == true
+                else -> isSystemInDarkTheme()
             }
 
             // Notification permission request for Android 13+ (API 33+)
@@ -55,11 +58,27 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            TimeManagerTheme(darkTheme = isDarkTheme) {
+            TimeManagerTheme(
+                appTheme = appTheme,
+                darkTheme = isDarkTheme
+            ) {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     MainAppScaffold(viewModel = viewModel)
                 }
             }
+        }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleAlarmAudioIntent(intent)
+    }
+
+    private fun handleAlarmAudioIntent(intent: android.content.Intent?) {
+        if (intent?.getBooleanExtra(com.example.alarm.NotificationHelper.EXTRA_STOP_ALARM_AUDIO, false) == true) {
+            val reminderId = intent.getLongExtra(com.example.alarm.NotificationHelper.EXTRA_REMINDER_ID, -1L)
+            com.example.alarm.AlarmAudioPlayer.stop(if (reminderId > 0) reminderId else null)
         }
     }
 }

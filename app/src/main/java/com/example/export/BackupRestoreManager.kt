@@ -218,6 +218,8 @@ class BackupRestoreManager(
         settingsObj.put("weekStartDay", settings.weekStartDay)
         settingsObj.put("is24HourFormat", settings.is24HourFormat)
         settingsObj.put("trackingStartTimestamp", settings.trackingStartTimestamp)
+        settingsObj.put("alarmRingtoneEnabled", settings.alarmRingtoneEnabled)
+        settingsObj.put("themeId", settings.themeId)
         root.put("settings", settingsObj)
 
         return root.toString(2)
@@ -458,7 +460,9 @@ class BackupRestoreManager(
             vibrationEnabled = settingsObj?.optBoolean("vibrationEnabled", true) ?: true,
             weekStartDay = settingsObj?.optInt("weekStartDay", 1) ?: 1,
             is24HourFormat = settingsObj?.optBoolean("is24HourFormat", true) ?: true,
-            trackingStartTimestamp = trackingStart
+            trackingStartTimestamp = trackingStart,
+            alarmRingtoneEnabled = settingsObj?.optBoolean("alarmRingtoneEnabled", true) ?: true,
+            themeId = settingsObj?.optString("themeId", "SYSTEM") ?: "SYSTEM"
         )
 
         // Execute transactional restore

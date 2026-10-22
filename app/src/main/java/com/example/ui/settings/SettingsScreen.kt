@@ -22,9 +22,23 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.HourglassTop
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.RadioButton
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.sp
+import com.example.ui.theme.AppTheme
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
@@ -96,27 +110,13 @@ fun SettingsScreen(
                     }
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    Text("Theme Mode", style = MaterialTheme.typography.labelMedium)
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        FilterChip(
-                            selected = settings.isDarkMode == null,
-                            onClick = { viewModel.saveUserSettings(settings.copy(isDarkMode = null)) },
-                            label = { Text("System") }
-                        )
-                        FilterChip(
-                            selected = settings.isDarkMode == false,
-                            onClick = { viewModel.saveUserSettings(settings.copy(isDarkMode = false)) },
-                            label = { Text("Light") }
-                        )
-                        FilterChip(
-                            selected = settings.isDarkMode == true,
-                            onClick = { viewModel.saveUserSettings(settings.copy(isDarkMode = true)) },
-                            label = { Text("Dark") }
-                        )
-                    }
+                    // 10-Theme Palette Selector
+                    ThemeSelectorSection(
+                        currentThemeId = settings.themeId,
+                        onSelectTheme = { theme ->
+                            viewModel.saveUserSettings(settings.copy(themeId = theme.id))
+                        }
+                    )
 
                     Spacer(modifier = Modifier.height(12.dp))
                     Row(
@@ -182,6 +182,8 @@ fun SettingsScreen(
 
         // 3. Sound and Vibration
         item {
+            val isAlarmPlaying by com.example.alarm.AlarmAudioPlayer.isPlayingState.collectAsState()
+
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
@@ -191,28 +193,92 @@ fun SettingsScreen(
                     Text("Sound & Vibration", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     Spacer(modifier = Modifier.height(12.dp))
 
+                    // Normal notifications sound
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("Sound Alerts Enabled", style = MaterialTheme.typography.bodyMedium)
+                        Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                            Text("Normal Notifications Sound", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                            Text("Plays the Android system-default notification sound for general alerts and focus transitions", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                         Switch(
                             checked = settings.soundEnabled,
-                            onCheckedChange = { viewModel.saveUserSettings(settings.copy(soundEnabled = it)) }
+                            onCheckedChange = { viewModel.saveUserSettings(settings.copy(soundEnabled = it)) },
+                            modifier = Modifier.testTag("switch_normal_notifications_sound")
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Dedicated alarm & reminder ringtone
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("Vibration Alerts Enabled", style = MaterialTheme.typography.bodyMedium)
+                        Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                            Text("Dedicated Alarm & Reminder Ringtone", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                            Text("Plays the built-in 12-second ringtone (reminder_alarm.mp3) exclusively for scheduled alarms and reminders", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Switch(
+                            checked = settings.alarmRingtoneEnabled,
+                            onCheckedChange = { viewModel.saveUserSettings(settings.copy(alarmRingtoneEnabled = it)) },
+                            modifier = Modifier.testTag("switch_alarm_ringtone")
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Test Alarm Sound button
+                    OutlinedButton(
+                        onClick = {
+                            if (isAlarmPlaying) {
+                                com.example.alarm.AlarmAudioPlayer.stop()
+                            } else {
+                                com.example.alarm.AlarmAudioPlayer.playTest(context)
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("button_test_alarm_sound")
+                    ) {
+                        Icon(
+                            if (isAlarmPlaying) Icons.Default.Close else Icons.Default.VolumeUp,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(if (isAlarmPlaying) "Stop Test Sound" else "Test Alarm Sound (12s Ringtone)")
+                    }
+
+                    if (isAlarmPlaying) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Playing dedicated reminder_alarm.mp3 (auto-stops in ~12 seconds)",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(start = 4.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Vibration alerts
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                            Text("Vibration Alerts", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                            Text("Vibrates device when alarms and notifications trigger", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                         Switch(
                             checked = settings.vibrationEnabled,
-                            onCheckedChange = { viewModel.saveUserSettings(settings.copy(vibrationEnabled = it)) }
+                            onCheckedChange = { viewModel.saveUserSettings(settings.copy(vibrationEnabled = it)) },
+                            modifier = Modifier.testTag("switch_vibration_alerts")
                         )
                     }
                 }
@@ -340,5 +406,226 @@ fun SettingsScreen(
         }
 
         item { Spacer(modifier = Modifier.height(48.dp)) }
+    }
+}
+
+@Composable
+fun ThemeSelectorSection(
+    currentThemeId: String,
+    onSelectTheme: (AppTheme) -> Unit
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(
+                    text = "Theme Gallery (${AppTheme.entries.size} Palettes)",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = "Tap a palette to restyle the entire app immediately.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(14.dp))
+
+        // 2-column or list gallery
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            AppTheme.entries.chunked(2).forEach { pair ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    pair.forEach { theme ->
+                        val isSelected = theme.id.equals(currentThemeId, ignoreCase = true)
+                        ThemeGalleryCard(
+                            theme = theme,
+                            isSelected = isSelected,
+                            onClick = { onSelectTheme(theme) },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    if (pair.size == 1) {
+                        Spacer(modifier = Modifier.weight(1f))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ThemeGalleryCard(
+    theme: AppTheme,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f) else MaterialTheme.colorScheme.surface,
+        border = BorderStroke(
+            width = if (isSelected) 2.dp else 1.dp,
+            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+        ),
+        shadowElevation = if (isSelected) 2.dp else 0.dp,
+        modifier = modifier
+            .clickable(onClick = onClick)
+            .testTag("theme_card_${theme.id.lowercase()}")
+    ) {
+        Column(modifier = Modifier.padding(10.dp)) {
+            // Miniature App UI Preview Tile
+            MiniAppMockup(
+                primaryColor = theme.primaryPreview,
+                secondaryColor = theme.secondaryPreview,
+                backgroundColor = theme.backgroundPreview
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = theme.displayName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1
+                )
+
+                if (isSelected) {
+                    Icon(
+                        Icons.Default.CheckCircle,
+                        contentDescription = "Selected",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(2.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (theme.isDarkOnly) {
+                    Surface(shape = RoundedCornerShape(4.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+                        Text("DARK", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp), fontSize = 8.sp, fontWeight = FontWeight.Black)
+                    }
+                } else if (theme.isLightOnly) {
+                    Surface(shape = RoundedCornerShape(4.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+                        Text("LIGHT", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp), fontSize = 8.sp, fontWeight = FontWeight.Black)
+                    }
+                } else {
+                    Surface(shape = RoundedCornerShape(4.dp), color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)) {
+                        Text("AUTO", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp), fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                // Mini Color Swatches
+                Row(horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Box(modifier = Modifier.size(10.dp).clip(CircleShape).background(theme.primaryPreview))
+                    Box(modifier = Modifier.size(10.dp).clip(CircleShape).background(theme.secondaryPreview))
+                    Box(modifier = Modifier.size(10.dp).clip(CircleShape).background(theme.backgroundPreview).border(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f), CircleShape))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun MiniAppMockup(
+    primaryColor: Color,
+    secondaryColor: Color,
+    backgroundColor: Color,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        shape = RoundedCornerShape(10.dp),
+        color = backgroundColor,
+        border = BorderStroke(1.dp, Color.Black.copy(alpha = 0.08f)),
+        modifier = modifier
+            .fillMaxWidth()
+            .height(60.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(6.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            // Header bar simulation
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .width(26.dp)
+                        .height(4.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(primaryColor)
+                )
+                Box(
+                    modifier = Modifier
+                        .size(5.dp)
+                        .clip(CircleShape)
+                        .background(secondaryColor)
+                )
+            }
+
+            // Hero card simulation
+            Surface(
+                shape = RoundedCornerShape(4.dp),
+                color = primaryColor.copy(alpha = 0.18f),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 3.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .width(32.dp)
+                            .height(3.dp)
+                            .clip(RoundedCornerShape(1.5.dp))
+                            .background(primaryColor)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .width(14.dp)
+                            .height(5.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(primaryColor)
+                    )
+                }
+            }
+
+            // Chart bars simulation
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.Bottom
+            ) {
+                Box(modifier = Modifier.width(5.dp).height(8.dp).clip(RoundedCornerShape(1.dp)).background(primaryColor))
+                Box(modifier = Modifier.width(5.dp).height(14.dp).clip(RoundedCornerShape(1.dp)).background(primaryColor))
+                Box(modifier = Modifier.width(5.dp).height(6.dp).clip(RoundedCornerShape(1.dp)).background(secondaryColor))
+                Box(modifier = Modifier.width(5.dp).height(16.dp).clip(RoundedCornerShape(1.dp)).background(primaryColor))
+            }
+        }
     }
 }

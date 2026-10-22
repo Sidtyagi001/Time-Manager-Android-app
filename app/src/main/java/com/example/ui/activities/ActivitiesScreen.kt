@@ -1,5 +1,7 @@
 package com.example.ui.activities
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -22,10 +24,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Archive
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Unarchive
@@ -34,13 +39,17 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
@@ -61,6 +70,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.data.local.entity.ActivityEntity
 import com.example.ui.MainViewModel
 
@@ -71,6 +81,7 @@ fun ActivitiesScreen(
     modifier: Modifier = Modifier
 ) {
     val allActivities by viewModel.allActivities.collectAsState()
+    val activeSession by viewModel.activeSession.collectAsState()
     var selectedTab by remember { mutableIntStateOf(0) } // 0: Active, 1: Archived
     var searchQuery by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf<String?>(null) }
@@ -99,6 +110,9 @@ fun ActivitiesScreen(
         floatingActionButton = {
             FloatingActionButton(
                 onClick = { showCreateDialog = true },
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+                shape = RoundedCornerShape(16.dp),
                 modifier = Modifier.testTag("add_activity_fab")
             ) {
                 Icon(Icons.Default.Add, contentDescription = "Add Activity")
@@ -110,55 +124,103 @@ fun ActivitiesScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            TabRow(selectedTabIndex = selectedTab) {
+            // Tab Selector
+            TabRow(
+                selectedTabIndex = selectedTab,
+                containerColor = MaterialTheme.colorScheme.surface
+            ) {
                 Tab(
                     selected = selectedTab == 0,
                     onClick = { selectedTab = 0 },
-                    text = { Text("Active (${allActivities.count { !it.isArchived }})") }
+                    text = {
+                        Text(
+                            text = "Active (${allActivities.count { !it.isArchived }})",
+                            fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Medium
+                        )
+                    }
                 )
                 Tab(
                     selected = selectedTab == 1,
                     onClick = { selectedTab = 1 },
-                    text = { Text("Archived (${allActivities.count { it.isArchived }})") }
+                    text = {
+                        Text(
+                            text = "Archived (${allActivities.count { it.isArchived }})",
+                            fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Medium
+                        )
+                    }
                 )
             }
 
-            Column(modifier = Modifier.padding(16.dp)) {
+            // Search Bar & Category Filter Pills
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
+            ) {
                 OutlinedTextField(
                     value = searchQuery,
                     onValueChange = { searchQuery = it },
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("search_activities_field"),
-                    placeholder = { Text("Search activities...") },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                    placeholder = { Text("Search by name, category, or notes...") },
+                    leadingIcon = {
+                        Icon(
+                            Icons.Default.Search,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    },
+                    trailingIcon = {
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(onClick = { searchQuery = "" }) {
+                                Icon(Icons.Default.Clear, contentDescription = "Clear")
+                            }
+                        }
+                    },
                     singleLine = true,
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(14.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = MaterialTheme.colorScheme.surface,
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                    )
                 )
 
                 if (categories.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         item {
                             FilterChip(
                                 selected = selectedCategory == null,
                                 onClick = { selectedCategory = null },
-                                label = { Text("All") }
+                                label = { Text("All (${allActivities.count { if (selectedTab == 0) !it.isArchived else it.isArchived }})") },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
                             )
                         }
                         items(categories) { cat ->
+                            val count = allActivities.count {
+                                it.category == cat && (if (selectedTab == 0) !it.isArchived else it.isArchived)
+                            }
                             FilterChip(
                                 selected = selectedCategory == cat,
                                 onClick = {
                                     selectedCategory = if (selectedCategory == cat) null else cat
                                 },
-                                label = { Text(cat) }
+                                label = { Text("$cat ($count)") },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
                             )
                         }
                     }
                 }
             }
 
+            // Activity Cards List
             if (filteredList.isEmpty()) {
                 Box(
                     modifier = Modifier
@@ -166,21 +228,40 @@ fun ActivitiesScreen(
                         .padding(32.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = if (selectedTab == 0) "No active activities match your search." else "No archived activities.",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            modifier = Modifier.size(64.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    Icons.Default.Search,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(32.dp)
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = if (selectedTab == 0) "No active activities match your search." else "No archived activities.",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     items(filteredList, key = { it.id }) { activity ->
+                        val isCurrentRunning = activeSession?.activityId == activity.id
                         ActivityItemCard(
                             activity = activity,
+                            isCurrentlyActive = isCurrentRunning,
                             onStartTracking = { viewModel.startTracking(activity) },
                             onToggleFavorite = { viewModel.toggleFavorite(activity) },
                             onEdit = { activityToEdit = activity },
@@ -188,7 +269,7 @@ fun ActivitiesScreen(
                             onDelete = { activityToDelete = activity }
                         )
                     }
-                    item { Spacer(modifier = Modifier.height(72.dp)) }
+                    item { Spacer(modifier = Modifier.height(84.dp)) }
                 }
             }
         }
@@ -228,7 +309,11 @@ fun ActivitiesScreen(
                     onClick = {
                         viewModel.softDeleteActivity(target.id)
                         activityToDelete = null
-                    }
+                    },
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError
+                    )
                 ) {
                     Text("Delete")
                 }
@@ -245,6 +330,7 @@ fun ActivitiesScreen(
 @Composable
 fun ActivityItemCard(
     activity: ActivityEntity,
+    isCurrentlyActive: Boolean,
     onStartTracking: () -> Unit,
     onToggleFavorite: () -> Unit,
     onEdit: () -> Unit,
@@ -257,47 +343,83 @@ fun ActivityItemCard(
         MaterialTheme.colorScheme.primary
     }
 
+    var showMenu by remember { mutableStateOf(false) }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .testTag("activity_card_${activity.name}"),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isCurrentlyActive) {
+                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+            } else {
+                MaterialTheme.colorScheme.surface
+            }
+        ),
+        border = BorderStroke(
+            width = if (isCurrentlyActive) 2.dp else 1.dp,
+            color = if (isCurrentlyActive) parsedColor else MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+        )
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
+                .padding(horizontal = 14.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // Visual Category Bar / Avatar Dot
             Box(
                 modifier = Modifier
                     .size(16.dp)
                     .clip(CircleShape)
                     .background(parsedColor)
             )
+
             Spacer(modifier = Modifier.width(12.dp))
+
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = activity.name,
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Surface(
                         shape = RoundedCornerShape(6.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant
+                        color = parsedColor.copy(alpha = 0.15f)
                     ) {
                         Text(
                             text = activity.category,
                             style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = parsedColor
                         )
                     }
+
+                    if (isCurrentlyActive) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = MaterialTheme.colorScheme.primary
+                        ) {
+                            Text(
+                                text = "ACTIVE",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
+                                fontSize = 9.sp
+                            )
+                        }
+                    }
                 }
+
                 if (activity.description.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = activity.description,
                         style = MaterialTheme.typography.bodySmall,
@@ -307,36 +429,103 @@ fun ActivityItemCard(
                 }
             }
 
-            IconButton(onClick = onToggleFavorite) {
+            // Favorite Button
+            IconButton(
+                onClick = onToggleFavorite,
+                modifier = Modifier.size(36.dp)
+            ) {
                 Icon(
                     if (activity.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                     contentDescription = "Favorite",
+                    modifier = Modifier.size(20.dp),
                     tint = if (activity.isFavorite) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
-            IconButton(onClick = onStartTracking, modifier = Modifier.testTag("track_${activity.name}")) {
-                Icon(
-                    Icons.Default.PlayArrow,
-                    contentDescription = "Start Tracking",
-                    tint = MaterialTheme.colorScheme.primary
-                )
+            // Start Tracking Action Button
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = if (isCurrentlyActive) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                modifier = Modifier
+                    .clickable(onClick = onStartTracking)
+                    .testTag("track_${activity.name}")
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.PlayArrow,
+                        contentDescription = "Start Tracking",
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = if (isCurrentlyActive) "Active" else "Start",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
             }
 
-            IconButton(onClick = onEdit) {
-                Icon(Icons.Default.Edit, contentDescription = "Edit", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
+            // Overflow Options Menu
+            Box {
+                IconButton(
+                    onClick = { showMenu = true },
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(
+                        Icons.Default.MoreVert,
+                        contentDescription = "Options",
+                        modifier = Modifier.size(18.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
 
-            IconButton(onClick = onArchive) {
-                Icon(
-                    if (activity.isArchived) Icons.Default.Unarchive else Icons.Default.Archive,
-                    contentDescription = "Archive",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            IconButton(onClick = onDelete) {
-                Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
+                DropdownMenu(
+                    expanded = showMenu,
+                    onDismissRequest = { showMenu = false }
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Edit Activity") },
+                        leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                        onClick = {
+                            showMenu = false
+                            onEdit()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text(if (activity.isArchived) "Unarchive" else "Archive") },
+                        leadingIcon = {
+                            Icon(
+                                if (activity.isArchived) Icons.Default.Unarchive else Icons.Default.Archive,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        },
+                        onClick = {
+                            showMenu = false
+                            onArchive()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Delete Activity", color = MaterialTheme.colorScheme.error) },
+                        leadingIcon = {
+                            Icon(
+                                Icons.Default.Delete,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        },
+                        onClick = {
+                            showMenu = false
+                            onDelete()
+                        }
+                    )
+                }
             }
         }
     }
@@ -358,7 +547,13 @@ fun ActivityEditDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (initial == null) "Create Activity" else "Edit Activity") },
+        title = {
+            Text(
+                if (initial == null) "Create Activity" else "Edit Activity",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+        },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
@@ -366,14 +561,16 @@ fun ActivityEditDialog(
                     onValueChange = { name = it },
                     label = { Text("Activity Name") },
                     singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth().testTag("activity_name_input")
                 )
 
                 OutlinedTextField(
                     value = category,
                     onValueChange = { category = it },
-                    label = { Text("Category") },
+                    label = { Text("Category (e.g. Work, Study, Health)") },
                     singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth()
                 )
 
@@ -381,39 +578,45 @@ fun ActivityEditDialog(
                     value = description,
                     onValueChange = { description = it },
                     label = { Text("Description (Optional)") },
+                    shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                Text("Color Palette", style = MaterialTheme.typography.labelMedium)
+                Text("Activity Color", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     presetColors.forEach { hex ->
                         val color = Color(android.graphics.Color.parseColor(hex))
+                        val isSelected = colorHex.equals(hex, ignoreCase = true)
                         Box(
                             modifier = Modifier
-                                .size(28.dp)
+                                .size(32.dp)
                                 .clip(CircleShape)
                                 .background(color)
-                                .clickable { colorHex = hex }
+                                .clickable { colorHex = hex },
+                            contentAlignment = Alignment.Center
                         ) {
-                            if (colorHex.equals(hex, ignoreCase = true)) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(10.dp)
-                                        .clip(CircleShape)
-                                        .background(Color.White)
-                                        .align(Alignment.Center)
+                            if (isSelected) {
+                                Icon(
+                                    Icons.Default.Check,
+                                    contentDescription = "Selected",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(16.dp)
                                 )
                             }
                         }
                     }
                 }
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.clickable { isFavorite = !isFavorite }
+                ) {
                     Checkbox(
                         checked = isFavorite,
                         onCheckedChange = { isFavorite = it }
                     )
-                    Text("Add to Quick-Start Favorites")
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Add to Quick-Start Favorites", style = MaterialTheme.typography.bodyMedium)
                 }
             }
         },
@@ -439,6 +642,7 @@ fun ActivityEditDialog(
                     }
                 },
                 enabled = name.isNotBlank(),
+                shape = RoundedCornerShape(10.dp),
                 modifier = Modifier.testTag("save_activity_button")
             ) {
                 Text("Save")

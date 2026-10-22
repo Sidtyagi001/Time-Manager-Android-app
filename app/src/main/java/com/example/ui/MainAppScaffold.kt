@@ -227,7 +227,10 @@ fun MainAppScaffold(
                 }
 
                 // Bottom Navigation Bar
-                NavigationBar {
+                androidx.compose.material3.NavigationBar(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    tonalElevation = 6.dp
+                ) {
                     navItems.forEach { item ->
                         val selected = currentRoute == item.screen.route
                         NavigationBarItem(
@@ -243,8 +246,27 @@ fun MainAppScaffold(
                                     }
                                 }
                             },
-                            icon = { Icon(item.icon, contentDescription = item.label) },
-                            label = { Text(item.label) },
+                            icon = {
+                                Icon(
+                                    imageVector = item.icon,
+                                    contentDescription = item.label,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            },
+                            label = {
+                                Text(
+                                    text = item.label,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
+                                )
+                            },
+                            colors = androidx.compose.material3.NavigationBarItemDefaults.colors(
+                                selectedIconColor = MaterialTheme.colorScheme.primary,
+                                selectedTextColor = MaterialTheme.colorScheme.primary,
+                                indicatorColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f),
+                                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                            ),
                             modifier = Modifier.testTag("nav_tab_${item.screen.route}")
                         )
                     }
@@ -263,7 +285,9 @@ fun MainAppScaffold(
                     onNavigateToActivities = { navController.navigate(Screen.Activities.route) },
                     onNavigateToTimetable = { navController.navigate(Screen.Timetable.route) },
                     onNavigateToFocus = { navController.navigate(Screen.Focus.route) },
-                    onNavigateToReminders = { navController.navigate(Screen.Reminders.route) }
+                    onNavigateToReminders = { navController.navigate(Screen.Reminders.route) },
+                    onNavigateToHistory = { navController.navigate(Screen.History.route) },
+                    onNavigateToSettings = { navController.navigate(Screen.Settings.route) }
                 )
             }
             composable(Screen.Activities.route) {

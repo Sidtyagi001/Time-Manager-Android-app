@@ -69,9 +69,15 @@ class AlarmReceiver : BroadcastReceiver() {
                         reminderId = reminder.id,
                         title = reminder.title,
                         description = reminder.description,
-                        soundEnabled = reminder.isSoundEnabled,
+                        soundEnabled = false,
                         vibrateEnabled = reminder.isVibrationEnabled
                     )
+
+                    // Trigger dedicated 12-second ringtone if enabled in settings and reminder
+                    val settings = db.userSettingsDao().getSettings() ?: com.example.data.local.entity.UserSettingsEntity()
+                    if (settings.alarmRingtoneEnabled && reminder.isSoundEnabled) {
+                        com.example.alarm.AlarmAudioPlayer.playAlarm(context, reminder.id)
+                    }
                 }
             } finally {
                 pendingResult.finish()
@@ -141,6 +147,7 @@ class NotificationActionReceiver : BroadcastReceiver() {
     companion object {
         const val ACTION_SNOOZE_REMINDER = "com.example.ACTION_SNOOZE_REMINDER"
         const val ACTION_DISMISS_REMINDER = "com.example.ACTION_DISMISS_REMINDER"
+        const val ACTION_DISMISS_REMINDER_SOUND = "com.example.ACTION_DISMISS_REMINDER_SOUND"
         const val ACTION_STOP_FOCUS = "com.example.ACTION_STOP_FOCUS"
         const val EXTRA_REMINDER_ID = "extra_reminder_id"
         const val EXTRA_RUN_ID = "extra_run_id"
@@ -148,6 +155,19 @@ class NotificationActionReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
         val action = intent.action ?: return
+
+        // Stop dedicated alarm ringtone immediately with zero latency
+        when (action) {
+            ACTION_SNOOZE_REMINDER, ACTION_DISMISS_REMINDER, ACTION_DISMISS_REMINDER_SOUND -> {
+                val reminderId = intent.getLongExtra(EXTRA_REMINDER_ID, -1L)
+                com.example.alarm.AlarmAudioPlayer.stop(if (reminderId > 0) reminderId else null)
+            }
+        }
+
+        if (action == ACTION_DISMISS_REMINDER_SOUND) {
+            return
+        }
+
         val pendingResult = goAsync()
 
         CoroutineScope(Dispatchers.IO).launch {

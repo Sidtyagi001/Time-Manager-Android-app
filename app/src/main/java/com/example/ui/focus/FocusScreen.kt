@@ -1,5 +1,7 @@
 package com.example.ui.focus
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -20,16 +22,19 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Coffee
 import androidx.compose.material.icons.filled.HourglassBottom
 import androidx.compose.material.icons.filled.HourglassTop
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -52,11 +57,9 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.domain.focus.FocusPhaseType
 import com.example.ui.MainViewModel
-import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 
 @Composable
 fun FocusScreen(
@@ -84,49 +87,56 @@ fun FocusScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        // Header
         item {
-            Text(
-                text = "Pomodoro Focus Mode",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Text(
-                text = "Continuous recurring cycles of focused work and refreshing rest.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "Pomodoro Focus Mode",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "Continuous recurring cycles of deep concentration & restorative rest",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
 
         // Circular Timer Dial
         item {
+            val isRunning = activeRun != null && !activeRun!!.isFinished && focusState != null
+            val progress = if (isRunning) focusState!!.progressFraction else 0f
+            val phase = focusState?.phase ?: FocusPhaseType.FOCUS
+
+            val phaseColor = if (phase == FocusPhaseType.FOCUS) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.tertiary
+            }
+            val trackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+
             Box(
                 modifier = Modifier
-                    .size(240.dp)
+                    .size(260.dp)
                     .padding(8.dp),
                 contentAlignment = Alignment.Center
             ) {
-                val isRunning = activeRun != null && !activeRun!!.isFinished && focusState != null
-                val progress = if (isRunning) focusState!!.progressFraction else 0f
-                val phase = focusState?.phase ?: FocusPhaseType.FOCUS
-
-                val primaryColor = if (phase == FocusPhaseType.FOCUS) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.tertiary
-                }
-                val trackColor = MaterialTheme.colorScheme.surfaceVariant
-
                 Canvas(modifier = Modifier.fillMaxSize()) {
-                    val strokeWidth = 14.dp.toPx()
+                    val strokeWidth = 16.dp.toPx()
                     // Background track
                     drawCircle(
                         color = trackColor,
                         style = Stroke(width = strokeWidth)
                     )
-                    // Progress arc
+                    // Progress arc with smooth round cap
                     drawArc(
-                        color = primaryColor,
+                        color = phaseColor,
                         startAngle = -90f,
                         sweepAngle = progress * 360f,
                         useCenter = false,
@@ -134,7 +144,7 @@ fun FocusScreen(
                     )
                 }
 
-                // Inner content
+                // Inner content inside dial
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
@@ -148,47 +158,77 @@ fun FocusScreen(
 
                         Surface(
                             shape = RoundedCornerShape(12.dp),
-                            color = if (phase == FocusPhaseType.FOCUS) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.tertiaryContainer
+                            color = phaseColor.copy(alpha = 0.15f)
                         ) {
-                            Text(
-                                text = if (phase == FocusPhaseType.FOCUS) "FOCUS" else "REST BREAK",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                color = if (phase == FocusPhaseType.FOCUS) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onTertiaryContainer
-                            )
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = if (phase == FocusPhaseType.FOCUS) Icons.Default.Psychology else Icons.Default.Coffee,
+                                    contentDescription = null,
+                                    tint = phaseColor,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = if (phase == FocusPhaseType.FOCUS) "DEEP FOCUS" else "REST BREAK",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Black,
+                                    color = phaseColor
+                                )
+                            }
                         }
 
-                        Spacer(modifier = Modifier.height(6.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             text = timeStr,
-                            style = MaterialTheme.typography.displayMedium,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = MaterialTheme.colorScheme.onSurface
+                            style = MaterialTheme.typography.displayLarge,
+                            fontWeight = FontWeight.Black,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            letterSpacing = (-1.0).sp
                         )
 
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             text = "Cycle #${focusState!!.cycleNumber}",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Medium,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+
+                        if (!activeRun?.linkedActivityName.isNullOrBlank()) {
+                            Text(
+                                text = activeRun!!.linkedActivityName!!,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = phaseColor,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
                     } else {
-                        Icon(
-                            Icons.Default.HourglassTop,
-                            contentDescription = null,
-                            modifier = Modifier.size(48.dp),
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Box(
+                            modifier = Modifier
+                                .size(54.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Default.HourglassTop,
+                                contentDescription = null,
+                                modifier = Modifier.size(28.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(10.dp))
                         Text(
                             text = "$customFocusMinutes / $customBreakMinutes",
-                            style = MaterialTheme.typography.displaySmall,
-                            fontWeight = FontWeight.Bold
+                            style = MaterialTheme.typography.displayMedium,
+                            fontWeight = FontWeight.Black,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = "Ready to begin",
+                            text = "Ready to start cycle",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -201,16 +241,17 @@ fun FocusScreen(
         if (focusState?.isWarningActive == true) {
             item {
                 Surface(
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(14.dp),
                     color = MaterialTheme.colorScheme.errorContainer,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.4f)),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
-                        modifier = Modifier.padding(12.dp),
+                        modifier = Modifier.padding(14.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(Icons.Default.NotificationsActive, contentDescription = null, tint = MaterialTheme.colorScheme.onErrorContainer)
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Spacer(modifier = Modifier.width(10.dp))
                         Text(
                             text = "30 seconds left before transition to next phase!",
                             style = MaterialTheme.typography.bodyMedium,
@@ -232,11 +273,12 @@ fun FocusScreen(
                         .fillMaxWidth()
                         .height(52.dp)
                         .testTag("stop_focus_button"),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    shape = RoundedCornerShape(14.dp)
                 ) {
                     Icon(Icons.Default.Stop, contentDescription = "Stop")
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Stop Focus Mode", style = MaterialTheme.typography.titleMedium)
+                    Text("Stop Focus Mode", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 }
             } else {
                 Button(
@@ -252,28 +294,31 @@ fun FocusScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(52.dp)
-                        .testTag("start_focus_button")
+                        .testTag("start_focus_button"),
+                    shape = RoundedCornerShape(14.dp)
                 ) {
                     Icon(Icons.Default.PlayArrow, contentDescription = "Start")
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Start Focus Mode ($customFocusMinutes min)", style = MaterialTheme.typography.titleMedium)
+                    Text("Start Focus Mode ($customFocusMinutes min)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 }
             }
         }
 
-        // Configuration Card (When Idle)
+        // Configuration Panel (When Idle)
         if (activeRun == null || activeRun!!.isFinished) {
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
                 ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
+                    Column(modifier = Modifier.padding(18.dp)) {
                         Text(
                             text = "Focus Interval Duration",
                             style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -281,7 +326,11 @@ fun FocusScreen(
                                 FilterChip(
                                     selected = customFocusMinutes == mins,
                                     onClick = { customFocusMinutes = mins },
-                                    label = { Text("$mins min") }
+                                    label = { Text("$mins min") },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                        selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
                                 )
                             }
                         }
@@ -290,7 +339,8 @@ fun FocusScreen(
                         Text(
                             text = "Break Interval Duration",
                             style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -298,7 +348,11 @@ fun FocusScreen(
                                 FilterChip(
                                     selected = customBreakMinutes == mins,
                                     onClick = { customBreakMinutes = mins },
-                                    label = { Text("$mins min") }
+                                    label = { Text("$mins min") },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                        selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer
+                                    )
                                 )
                             }
                         }
@@ -309,7 +363,7 @@ fun FocusScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Column {
+                            Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = "30-Second Warning Alert",
                                     style = MaterialTheme.typography.titleSmall,
@@ -327,7 +381,7 @@ fun FocusScreen(
                         if (activities.isNotEmpty()) {
                             Spacer(modifier = Modifier.height(16.dp))
                             Text(
-                                text = "Link Activity (Optional)",
+                                text = "Link Activity to Focus (Optional)",
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold
                             )
@@ -347,60 +401,13 @@ fun FocusScreen(
                                             selectedActivityId = act.id
                                             selectedActivityName = act.name
                                         },
-                                        label = { Text(act.name) }
+                                        label = { Text(act.name) },
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                        )
                                     )
                                 }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Summary Statistics Card
-        if (activeRun != null && !activeRun!!.isFinished && focusState != null) {
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text(
-                            text = "Current Run Progress",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Column {
-                                Text("Focus Completed", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text(
-                                    "${focusState!!.totalFocusSecondsCompleted / 60} min",
-                                    style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                            Column {
-                                Text("Break Completed", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text(
-                                    "${focusState!!.totalBreakSecondsCompleted / 60} min",
-                                    style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.tertiary
-                                )
-                            }
-                            Column {
-                                Text("Cycles", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text(
-                                    "${focusState!!.cycleNumber}",
-                                    style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.Bold
-                                )
                             }
                         }
                     }

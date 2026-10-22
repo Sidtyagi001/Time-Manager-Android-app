@@ -23,6 +23,9 @@ object NotificationHelper {
     const val NOTIFICATION_ID_FOCUS_TRANSITION = 99991
     const val NOTIFICATION_ID_FOCUS_WARNING = 99992
 
+    const val EXTRA_STOP_ALARM_AUDIO = "com.example.EXTRA_STOP_ALARM_AUDIO"
+    const val EXTRA_REMINDER_ID = "com.example.EXTRA_REMINDER_ID"
+
     fun createNotificationChannels(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -33,7 +36,12 @@ object NotificationHelper {
                 .setUsage(AudioAttributes.USAGE_ALARM)
                 .build()
 
-            // Reminder Channel
+            // Reminder Channel (Silent channel sound so dedicated AlarmAudioPlayer handles 12s reminder_alarm.mp3)
+            val existingReminderChannel = notificationManager.getNotificationChannel(CHANNEL_REMINDERS_ID)
+            if (existingReminderChannel != null && existingReminderChannel.sound != null) {
+                notificationManager.deleteNotificationChannel(CHANNEL_REMINDERS_ID)
+            }
+
             val reminderChannel = NotificationChannel(
                 CHANNEL_REMINDERS_ID,
                 context.getString(R.string.channel_reminders_name),
@@ -42,7 +50,7 @@ object NotificationHelper {
                 description = context.getString(R.string.channel_reminders_desc)
                 enableVibration(true)
                 vibrationPattern = longArrayOf(0, 500, 200, 500)
-                setSound(reminderSound, audioAttributes)
+                setSound(null, null)
             }
 
             // Focus Channel
@@ -72,6 +80,8 @@ object NotificationHelper {
     ) {
         val openIntent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra(EXTRA_STOP_ALARM_AUDIO, true)
+            putExtra(EXTRA_REMINDER_ID, reminderId)
         }
         val openPendingIntent = PendingIntent.getActivity(
             context,
@@ -104,6 +114,18 @@ object NotificationHelper {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        // Swipe-away / delete action to stop ringtone immediately
+        val deleteIntent = Intent(context, NotificationActionReceiver::class.java).apply {
+            action = NotificationActionReceiver.ACTION_DISMISS_REMINDER_SOUND
+            putExtra(NotificationActionReceiver.EXTRA_REMINDER_ID, reminderId)
+        }
+        val deletePendingIntent = PendingIntent.getBroadcast(
+            context,
+            (reminderId + 350000).toInt(),
+            deleteIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
         val builder = NotificationCompat.Builder(context, CHANNEL_REMINDERS_ID)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentTitle(title)
@@ -112,6 +134,7 @@ object NotificationHelper {
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setAutoCancel(true)
             .setContentIntent(openPendingIntent)
+            .setDeleteIntent(deletePendingIntent)
             .addAction(android.R.drawable.ic_popup_sync, "Snooze 10m", snoozePendingIntent)
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Dismiss", dismissPendingIntent)
 
@@ -121,11 +144,9 @@ object NotificationHelper {
             builder.setVibrate(longArrayOf(0))
         }
 
-        if (soundEnabled) {
-            builder.setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))
-        } else {
-            builder.setSound(null)
-        }
+        // Dedicated ringtone (reminder_alarm.mp3) is managed exclusively via AlarmAudioPlayer.
+        // We strictly setSound(null) here so Android's NotificationManager does NOT play the default notification sound.
+        builder.setSound(null)
 
         try {
             NotificationManagerCompat.from(context).notify(reminderId.toInt(), builder.build())

@@ -1,5 +1,6 @@
 package com.example.ui.reports
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -21,8 +22,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Coffee
 import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.HelpOutline
+import androidx.compose.material.icons.filled.Insights
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -51,14 +59,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.domain.time.DayTimeReport
 import com.example.domain.time.TimeAccountingEngine
-import com.example.ui.MainViewModel
 import com.example.domain.time.TimeFormatUtils
+import com.example.ui.MainViewModel
 import java.time.DayOfWeek
-import java.time.Instant
 import java.time.LocalDate
-import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.temporal.TemporalAdjusters
 import kotlin.math.max
@@ -76,13 +83,11 @@ fun ReportsScreen(
     var periodReports by remember { mutableStateOf<List<DayTimeReport>>(emptyList()) }
 
     val allSessions by viewModel.allSessions.collectAsState()
-    val allTasks by viewModel.selectedDateTasks.collectAsState()
     val userSettings by viewModel.userSettings.collectAsState()
     val is24Hour = userSettings?.is24HourFormat ?: true
 
     // Refresh report on date or tab change
     LaunchedEffect(selectedTab, currentDate, allSessions) {
-        val now = System.currentTimeMillis()
         when (selectedTab) {
             0 -> {
                 val dateStr = TimeAccountingEngine.formatDate(currentDate)
@@ -111,16 +116,31 @@ fun ReportsScreen(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Tab selector
+        // 1. Period Tab Selector
         item {
-            TabRow(selectedTabIndex = selectedTab) {
-                Tab(selected = selectedTab == 0, onClick = { selectedTab = 0 }, text = { Text("Daily") })
-                Tab(selected = selectedTab == 1, onClick = { selectedTab = 1 }, text = { Text("Weekly") })
-                Tab(selected = selectedTab == 2, onClick = { selectedTab = 2 }, text = { Text("Monthly") })
+            TabRow(
+                selectedTabIndex = selectedTab,
+                containerColor = MaterialTheme.colorScheme.surface
+            ) {
+                Tab(
+                    selected = selectedTab == 0,
+                    onClick = { selectedTab = 0 },
+                    text = { Text("Daily", fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Medium) }
+                )
+                Tab(
+                    selected = selectedTab == 1,
+                    onClick = { selectedTab = 1 },
+                    text = { Text("Weekly", fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Medium) }
+                )
+                Tab(
+                    selected = selectedTab == 2,
+                    onClick = { selectedTab = 2 },
+                    text = { Text("Monthly", fontWeight = if (selectedTab == 2) FontWeight.Bold else FontWeight.Medium) }
+                )
             }
         }
 
-        // Navigation header
+        // 2. Date Navigation Header
         item {
             PeriodNavHeader(
                 selectedTab = selectedTab,
@@ -142,7 +162,7 @@ fun ReportsScreen(
             )
         }
 
-        // Summary Metric Cards
+        // 3. Hero Productivity Summary Cards
         item {
             val totalTracked: Long
             val totalUntracked: Long
@@ -169,7 +189,7 @@ fun ReportsScreen(
                 } else 0f
             }
 
-            MetricsGrid(
+            ReportsHeroCard(
                 trackedMillis = totalTracked,
                 untrackedMillis = totalUntracked,
                 breakMillis = totalBreak,
@@ -180,15 +200,81 @@ fun ReportsScreen(
             )
         }
 
-        // Daily Trend Bar Chart (for Weekly or Monthly)
+        // 4. Factual Data Insights Card
+        item {
+            val totalTracked = if (selectedTab == 0) dailyReport?.trackedMillis ?: 0L else periodReports.sumOf { it.trackedMillis }
+            val breakdowns = if (selectedTab == 0) {
+                dailyReport?.activityBreakdowns ?: emptyList()
+            } else {
+                val map = mutableMapOf<Long, com.example.domain.time.ActivityBreakdown>()
+                for (r in periodReports) {
+                    for (b in r.activityBreakdowns) {
+                        val existing = map[b.activityId]
+                        if (existing == null) map[b.activityId] = b
+                        else map[b.activityId] = existing.copy(
+                            durationMillis = existing.durationMillis + b.durationMillis,
+                            sessionCount = existing.sessionCount + b.sessionCount
+                        )
+                    }
+                }
+                map.values.toList().sortedByDescending { it.durationMillis }
+            }
+
+            if (totalTracked > 0 && breakdowns.isNotEmpty()) {
+                val topActivity = breakdowns.first()
+                val topHours = topActivity.durationMillis / 3600000.0
+
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primary),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.Insights, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(18.dp))
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "PRODUCTIVITY INSIGHT",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Black,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                text = "Top Activity: ${topActivity.activityName} (${String.format("%.1f", topHours)}h, ${topActivity.sessionCount} sessions)",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // 5. Daily Trend Bar Chart (for Weekly or Monthly)
         if (selectedTab != 0 && periodReports.isNotEmpty()) {
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
                 ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
+                    Column(modifier = Modifier.padding(18.dp)) {
                         Text(
                             text = if (selectedTab == 1) "Daily Tracked Hours (This Week)" else "Daily Tracked Hours (This Month)",
                             style = MaterialTheme.typography.titleMedium,
@@ -201,7 +287,7 @@ fun ReportsScreen(
             }
         }
 
-        // Activity Breakdown Section
+        // 6. Activity Breakdown Section
         item {
             val breakdowns = if (selectedTab == 0) {
                 dailyReport?.activityBreakdowns ?: emptyList()
@@ -222,32 +308,33 @@ fun ReportsScreen(
                     }
                 }
                 map.values.map {
-                    it.copy(
-                        percentageOfTracked = if (totalTracked > 0) (it.durationMillis.toFloat() / totalTracked) * 100f else 0f
-                    )
+                    val pct = if (totalTracked > 0) (it.durationMillis.toFloat() / totalTracked) * 100f else 0f
+                    it.copy(percentageOfTracked = pct)
                 }.sortedByDescending { it.durationMillis }
             }
 
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
+                Column(modifier = Modifier.padding(18.dp)) {
                     Text(
                         text = "Activity Distribution",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
+
                     if (breakdowns.isEmpty()) {
                         Text(
-                            text = "No tracked activities in this period.",
+                            text = "No tracked activity recorded for this period.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     } else {
-                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                             breakdowns.forEach { b ->
                                 val hours = b.durationMillis / 3600000.0
                                 val color = try {
@@ -279,16 +366,16 @@ fun ReportsScreen(
                                         Text(
                                             text = "${String.format("%.1f", hours)}h (${String.format("%.0f", b.percentageOfTracked)}%)",
                                             style = MaterialTheme.typography.bodySmall,
-                                            fontWeight = FontWeight.Medium
+                                            fontWeight = FontWeight.Bold
                                         )
                                     }
-                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Spacer(modifier = Modifier.height(6.dp))
                                     LinearProgressIndicator(
                                         progress = { (b.percentageOfTracked / 100f).coerceIn(0f, 1f) },
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .height(6.dp)
-                                            .clip(RoundedCornerShape(3.dp)),
+                                            .height(8.dp)
+                                            .clip(RoundedCornerShape(4.dp)),
                                         color = color,
                                         trackColor = MaterialTheme.colorScheme.surfaceVariant
                                     )
@@ -300,17 +387,18 @@ fun ReportsScreen(
             }
         }
 
-        // Daily Activity Timeline (if Daily view)
+        // 7. Day Timeline (if Daily view)
         if (selectedTab == 0 && dailyReport != null && dailyReport!!.segments.isNotEmpty()) {
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
                 ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
+                    Column(modifier = Modifier.padding(18.dp)) {
                         Text(
-                            text = "Day Timeline",
+                            text = "Daily Chronological Flow",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
@@ -331,7 +419,7 @@ fun ReportsScreen(
                                             text = "$startStr - $endStr",
                                             style = MaterialTheme.typography.labelSmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            modifier = Modifier.width(90.dp)
+                                            modifier = Modifier.width(96.dp)
                                         )
                                         Text(
                                             text = seg.activityName,
@@ -353,18 +441,19 @@ fun ReportsScreen(
             }
         }
 
-        // Export to Excel Quick Link
+        // 8. Excel Export CTA Button
         item {
             Button(
                 onClick = onNavigateToExport,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(48.dp)
-                    .testTag("export_xlsx_button")
+                    .height(50.dp)
+                    .testTag("export_xlsx_button"),
+                shape = RoundedCornerShape(14.dp)
             ) {
                 Icon(Icons.Default.FileDownload, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Export Period to Excel (.xlsx)")
+                Text("Export Period to Excel (.xlsx)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             }
         }
 
@@ -390,13 +479,14 @@ fun PeriodNavHeader(
     }
 
     Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 4.dp),
+                .padding(horizontal = 8.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -416,7 +506,7 @@ fun PeriodNavHeader(
 }
 
 @Composable
-fun MetricsGrid(
+fun ReportsHeroCard(
     trackedMillis: Long,
     untrackedMillis: Long,
     breakMillis: Long,
@@ -434,49 +524,114 @@ fun MetricsGrid(
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(18.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
             ) {
                 Column {
-                    Text("Total Tracked", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("${String.format("%.1f", trackedHrs)}h", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                    Text(
+                        "Total Tracked Time",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        "${String.format("%.1f", trackedHrs)}h",
+                        style = MaterialTheme.typography.displayMedium,
+                        fontWeight = FontWeight.Black,
+                        color = MaterialTheme.colorScheme.primary
+                    )
                     if (daysCount > 1) {
-                        Text("Avg: ${String.format("%.1f", dailyAvg)}h/day", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            "Daily Avg: ${String.format("%.1f", dailyAvg)}h / day",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
-                Column {
-                    Text("Untracked", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("${String.format("%.1f", untrackedHrs)}h", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary)
-                    Text("Unlogged time", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Column {
-                    Text("Breaks", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("${String.format("%.1f", breakHrs)}h", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.tertiary)
-                    Text("Recorded rest", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        horizontalAlignment = Alignment.End
+                    ) {
+                        Text(
+                            "Completeness",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                        Text(
+                            "${String.format("%.0f", completeness)}%",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Black,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Stat Blocks Row
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text(
-                    text = "Planned vs Actual: ${String.format("%.1f", actualHrs)}h of ${String.format("%.1f", plannedHrs)}h planned",
-                    style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.Medium
-                )
-                Text(
-                    text = "${String.format("%.0f", completeness)}% completeness",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Bold
-                )
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Column(modifier = Modifier.padding(8.dp)) {
+                        Text("Tracked", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("${String.format("%.1f", trackedHrs)}h", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                    }
+                }
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.1f),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Column(modifier = Modifier.padding(8.dp)) {
+                        Text("Untracked", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("${String.format("%.1f", untrackedHrs)}h", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary)
+                    }
+                }
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.1f),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Column(modifier = Modifier.padding(8.dp)) {
+                        Text("Breaks", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("${String.format("%.1f", breakHrs)}h", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.tertiary)
+                    }
+                }
+            }
+
+            if (plannedHrs > 0.0) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Planned vs Actual: ${String.format("%.1f", actualHrs)}h of ${String.format("%.1f", plannedHrs)}h planned",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
             }
         }
     }
@@ -490,7 +645,7 @@ fun DailyTrendChart(reports: List<DayTimeReport>) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(140.dp)
+            .height(150.dp)
     ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
             val canvasWidth = size.width
@@ -498,7 +653,7 @@ fun DailyTrendChart(reports: List<DayTimeReport>) {
             val count = reports.size
             if (count == 0) return@Canvas
 
-            val barWidth = (canvasWidth / count) * 0.6f
+            val barWidth = (canvasWidth / count) * 0.55f
             val spacing = canvasWidth / count
 
             reports.forEachIndexed { index, r ->
@@ -511,7 +666,7 @@ fun DailyTrendChart(reports: List<DayTimeReport>) {
                     color = barColor,
                     topLeft = Offset(x, y),
                     size = Size(barWidth, barHeight),
-                    cornerRadius = CornerRadius(4.dp.toPx(), 4.dp.toPx())
+                    cornerRadius = CornerRadius(6.dp.toPx(), 6.dp.toPx())
                 )
             }
         }
